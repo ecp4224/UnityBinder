@@ -1,10 +1,19 @@
 using System;
 using System.Reflection;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
+/// <summary>
+/// UnityBinder entry class. Use this class to setup any Unity Object that has any
+/// Binder Attributes
+/// </summary>
 public static class UnityBinder 
 {
-	public static void Inject(MonoBehaviour obj)
+	/// <summary>
+	/// Inject an Object's field that have attributes.
+	/// </summary>
+	/// <param name="obj">The object to inject</param>
+	public static void Inject(Object obj)
 	{
 		var bindingFlags = BindingFlags.Instance |
 		                   BindingFlags.NonPublic |
@@ -14,94 +23,16 @@ public static class UnityBinder
 
 		foreach (var field in fields)
 		{
-			var injections = (BindComponent[])field.GetCustomAttributes(typeof(BindComponent), true);
+			var injections = (Binder[])field.GetCustomAttributes(typeof(Binder), true);
 
 			if (injections.Length > 0)
 			{
 				foreach (var inject in injections)
 				{
-					var fromObjName = inject.fromObject;
-					var injectType = field.FieldType;
-					var shouldFail = inject.failWhenNull;
-					var index = inject.index;
-					
-					var unityCall = typeof(GameObject).GetMethod("GetComponents", new Type[0]);
-					if (unityCall == null)
-					{
-						Debug.LogError("Could not find method GetComponents !!");
-						break;
-					}
-
-					GameObject fromObj;
-					if (string.IsNullOrEmpty(fromObjName))
-					{
-						fromObj = obj.gameObject;
-					}
-					else
-					{
-						fromObj = GameObject.Find(fromObjName);
-
-						if (fromObj == null)
-						{
-							fromObj = FindInActiveObjectByName(fromObjName);
-
-							if (fromObj == null)
-							{
-								if (shouldFail)
-								{
-									Fail("Could not find GameObject with name " + fromObjName + " for field " + field.Name);
-								}
-
-								continue;
-							}
-						}
-					}
-					
-
-					var genericMethod = unityCall.MakeGenericMethod(injectType);
-					var rawResult = genericMethod.Invoke(fromObj, null);
-
-					if (rawResult == null)
-					{
-						if (shouldFail)
-						{
-							Fail("Could not find component of type " + injectType + " for field " + field.Name);
-						}
-					} 
-					else if (rawResult is object[])
-					{
-						var result = rawResult as object[];
-
-						if (result.Length > 0)
-						{
-							if (index >= result.Length)
-							{
-								Fail("Could not find component of type " + injectType + " for field " + field.Name + " at index " + index);
-							}
-							else
-							{
-								var found = result[index];
-								
-								field.SetValue(obj, found);
-							}
-						}
-						else
-						{
-							if (shouldFail)
-							{
-								Fail("Could not find component of type " + injectType + " for field " + field.Name);
-							}
-						}
-					}
+					inject.InjectInto(obj, field);
 				}
 			}
 		}
-	}
-	
-	private static void Fail(string reason)
-	{
-		Debug.LogError(reason);
-		Application.Quit();
 	}
 
 	private static GameObject DeepFind(string name)
@@ -133,8 +64,8 @@ public static class UnityBinder
 		
 		return GameObject.Find(name);
 	}
-	
-	private static GameObject FindInActiveObjectByName(string name)
+
+	internal static GameObject FindInActiveObjectByName(string name)
 	{
 		if (name.StartsWith("/"))
 			return DeepFind(name);
@@ -154,22 +85,204 @@ public static class UnityBinder
 	}
 }
 
-[AttributeUsage(AttributeTargets.Field)] 
-public class BindComponent : Attribute
+/// <summary>
+/// Abstract resource to represent any kind of Bind
+/// </summary>
+[AttributeUsage(AttributeTargets.Field)]
+public abstract class Binder : Attribute
 {
+	public abstract void InjectInto(Object obj, FieldInfo field);
+}
 
-	public int index = 0;
-	public bool failWhenNull = false;
-	public string fromObject = "";
+/// <summary>
+/// Attribute to bind a resource at runtime
+/// </summary>
+[AttributeUsage(AttributeTargets.Field)]
+public class BindResource : Binder
+{
+	private static MethodInfo _cacheMethod;
+	private static MethodInfo _cacheNotGeneric;
 
-	public BindComponent(int index = 0, bool failWhenNull = false, string fromObject = "")
+	public static MethodInfo GenericResourceLoad
 	{
-		this.index = index;
-		this.failWhenNull = failWhenNull;
-		this.fromObject = fromObject;
+		get
+		{
+			if (_cacheMethod != null) return _cacheMethod;
+			
+			var methods = typeof(Resources).GetMethods();
+
+			foreach (var method in methods)
+			{
+				if (method.Name != "Load" || !method.IsGenericMethod) continue;
+
+				_cacheMethod = method;
+				break;
+			}
+
+			return _cacheMethod;
+		}
+	}
+
+	public static MethodInfo ResourceLoad
+	{
+		get
+		{
+			if (_cacheNotGeneric != null) return _cacheNotGeneric;
+
+			_cacheNotGeneric = typeof(Resources).GetMethod("Load", new[] {typeof(string)});
+
+			return _cacheNotGeneric;
+		}
+	}
+	
+	public string path;
+
+	public BindResource(string path)
+	{
+		this.path = path;
+	}
+
+
+	public override void InjectInto(Object obj, FieldInfo field)
+	{
+		var injectType = field.FieldType;
+
+		bool bindPrefab = false;
+		object rawResult;
+		if (injectType == typeof(GameObject))
+		{
+			bindPrefab = true;
+
+			injectType = typeof(Object);
+
+			rawResult = ResourceLoad.Invoke(null, new object[] {path});
+		}
+		else
+		{
+			var genericMethod = GenericResourceLoad.MakeGenericMethod(injectType);
+			rawResult = genericMethod.Invoke(null, new object[] { path });
+		}
+		
+
+		if (rawResult == null)
+		{
+			Debug.LogError("Could not find resource of type " + injectType + " for field " + field.Name);
+		}
+		else if (!injectType.IsInstanceOfType(rawResult))
+		{
+			Debug.LogError("Could not cast resource of type " + rawResult.GetType() + " to type of " + injectType + " for field " + field.Name);
+		}
+		else
+		{
+			if (bindPrefab)
+			{
+				var objResult = rawResult as Object;
+				var instance = Object.Instantiate(objResult) as GameObject;
+				
+				field.SetValue(obj, instance);
+			}
+			else
+			{
+				field.SetValue(obj, rawResult);
+			}
+		}
 	}
 }
 
+/// <summary>
+/// Attribute to Bind a field to a component at runtime
+/// </summary>
+[AttributeUsage(AttributeTargets.Field)] 
+public class BindComponent : Binder
+{
+
+	public int index = 0;
+	public string fromObject = "";
+
+	public BindComponent(int index = 0, string fromObject = "")
+	{
+		this.index = index;
+		this.fromObject = fromObject;
+	}
+
+	public override void InjectInto(Object obj, FieldInfo field)
+	{
+		var injectType = field.FieldType;
+					
+		var unityCall = typeof(GameObject).GetMethod("GetComponents", new Type[0]);
+		if (unityCall == null)
+		{
+			Debug.LogError("Could not find method GetComponents !!");
+			return;
+		}
+
+		GameObject fromObj;
+		if (string.IsNullOrEmpty(fromObject))
+		{
+			var component = obj as Component;
+			if (component != null)
+			{
+				fromObj = component.gameObject;
+			}
+			else
+			{
+				Debug.LogError("fromObject empty for field " + field.Name + ", and no default gameObject could be found!");
+				return;
+			}
+		}
+		else
+		{
+			fromObj = GameObject.Find(fromObject);
+
+			if (fromObj == null)
+			{
+				fromObj = UnityBinder.FindInActiveObjectByName(fromObject);
+
+				if (fromObj == null)
+				{
+					Debug.LogError("Could not find GameObject with name " + fromObject + " for field " + field.Name);
+
+					return;
+				}
+			}
+		}
+					
+
+		var genericMethod = unityCall.MakeGenericMethod(injectType);
+		var rawResult = genericMethod.Invoke(fromObj, null);
+
+		if (rawResult == null)
+		{
+			Debug.LogError("Could not find component of type " + injectType + " for field " + field.Name);
+		} 
+		else if (rawResult is object[])
+		{
+			var result = rawResult as object[];
+
+			if (result.Length > 0)
+			{
+				if (index >= result.Length)
+				{
+					Debug.LogError("Could not find component of type " + injectType + " for field " + field.Name + " at index " + index);
+				}
+				else
+				{
+					var found = result[index];
+								
+					field.SetValue(obj, found);
+				}
+			}
+			else
+			{
+				Debug.LogError("Could not find component of type " + injectType + " for field " + field.Name);
+			}
+		}
+	}
+}
+
+/// <summary>
+/// A MonoBehavior that injects fields in the Awake() function
+/// </summary>
 public class BindableMonoBehavior : MonoBehaviour {
 
 	public virtual void Awake()
