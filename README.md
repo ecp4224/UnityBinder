@@ -5,7 +5,7 @@ Annotate fields with [BindComponent] and automatically cast the corresponding co
 
 Simply put this script anywhere in your project. Once in your project, you can start using UnityBinder by either invoking
 
-```
+```csharp
 void Start() {
     UnityBinder.Inject(this)
 }
@@ -13,7 +13,7 @@ void Start() {
 
 or by extending the `BindableMonoBehavior` class instead of the default `MonoBehavior`
 
-```
+```csharp
 public class SimpleScript : BindableMonoBehavior {
     //Nothing else is needed, sub-class automatically injects on Awake()
 }
@@ -32,7 +32,7 @@ To Bind a field to a component, simply annotate the field with `[BindComponent]`
 
 ## Example
 
-```
+```csharp
 using UnityEngine;
 
 
