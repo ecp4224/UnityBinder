@@ -1,5 +1,9 @@
 # UnityBinder
-Lighweight solution to annotate fields with [BindComponent] and automatically casting the corresponding component from the scene.
+Get rid of all those messy `GetComponent` and `Resources.Load` calls!
+
+This script allows you to inject your public/private fields with what you need automatically! It's lightweight and easy to use/configure. 
+
+What is injecting? Injecting simply means that the `GetComponent` and `Resources.Load` functions are automatically called for you and "injected" into the field requesting it.
 
 ## Installing
 
@@ -27,18 +31,45 @@ The `BindableMonoBehavior` simply invokes `UnityBinder.Inject(this)` on `Awake()
 
 To Bind a field to a component, simply annotate the field with `[BindComponent]`. With the default constructor, it'll simple search for the Component on the gameObject attached to the current script.
 
+Example:
+```csharp
+public class SimpleScript : BindableMonoBehavior {
+    
+    [BindComponent]
+    private RigidBody _rigidBody;
+
+    ...
+}
+```
+This example will always set the `_rigidBody` field to be equal to the RigidBody component attached to the gameObject that is using this `SimpleScript`. Nothing else is needed!
+
 `[BindComponent]` has several options for more flexability
 
 * fromObject [string] - The name of the GameObject in the scene to search in (can be a path)
 * failWhenNull [bool] - Should the game fail if this component can't be find
 * index [int] - Which component to bind to, if a gameObject has multiple of the same type
 
+You can also bind any kind of resource using a similar syntax
+```csharp
+public class SimpleScript : BindableMonoBehavior {
+    
+    [BindComponent]
+    private RigidBody _rigidBody;
+    
+    [BindResource("Sprites/Square")]
+    private Sprite _square;
+
+    ...
+}
+```
+
+The `[BindResource]` attribute always requires a path.
+
 ## To Do
 
 * [BindAsset] - An annotation to bind any other kind of Object from your assets automatically
-* [BindPrefab] - An annotation to bind any GameObject prefab from your assets automatically
 
-## Example
+## Example Script
 
 ```csharp
 using UnityEngine;
@@ -84,10 +115,10 @@ public class SimpleScript : MonoBehaviour
 	// Use this for initialization
 	void Start()
 	{
-    //Inject all variables
+     		//Inject all variables
 		UnityBinder.Inject(this);
 		
-		//This will already be done by InjectComponent
+		//This will already be done by BindComponent
 		//_rigidbody2D = GetComponent<Rigidbody2D>();
 		
 		_rigidbody2D.AddForce(new Vector2(100f, 50f));
