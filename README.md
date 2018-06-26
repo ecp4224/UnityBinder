@@ -1,5 +1,5 @@
 # UnityBinder
-Annotate fields with [BindComponent] and automatically cast the corresponding component from the scene.
+Lighweight solution to annotate fields with [BindComponent] and automatically cast the corresponding component from the scene.
 
 ## Installing
 
@@ -28,7 +28,11 @@ To Bind a field to a component, simply annotate the field with `[BindComponent]`
 * fromObject [string] - The name of the GameObject in the scene to search in (can be a path)
 * failWhenNull [bool] - Should the game fail if this component can't be find
 * index [int] - Which component to bind to, if a gameObject has multiple of the same type
-* fromAsset [string] **coming soon** - The name of the Object in your assets to search in (can be a path) 
+
+## To Do
+
+* [BindAsset] - An annotation to bind any other kind of Object from your assets automatically
+* [BindPrefab] - An annotation to bind any GameObject prefab from your assets automatically
 
 ## Example
 
