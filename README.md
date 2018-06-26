@@ -1,9 +1,11 @@
 # UnityBinder
-Lighweight solution to annotate fields with [BindComponent] and automatically cast the corresponding component from the scene.
+Lighweight solution to annotate fields with [BindComponent] and automatically casting the corresponding component from the scene.
 
 ## Installing
 
-Simply put this script anywhere in your project. Once in your project, you can start using UnityBinder by either invoking
+Simply put this script anywhere in your project. 
+
+Once in your project, you can start using UnityBinder by either doing
 
 ```csharp
 void Start() {
@@ -18,6 +20,8 @@ public class SimpleScript : BindableMonoBehavior {
     //Nothing else is needed, sub-class automatically injects on Awake()
 }
 ```
+
+The `BindableMonoBehavior` simply invokes `UnityBinder.Inject(this)` on `Awake()`. The `Awake()` function is virtual, so it can be overriden if needed
 
 ## How to use
 
