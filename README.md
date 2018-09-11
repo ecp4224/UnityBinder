@@ -29,6 +29,7 @@ The `BindableMonoBehavior` simply invokes `UnityBinder.Inject(this)` on `Awake()
 
 ## How to use
 
+### BindComponent
 To Bind a field to a component, simply annotate the field with `[BindComponent]`. With the default constructor, it'll simple search for the Component on the gameObject attached to the current script.
 
 Example:
@@ -49,6 +50,8 @@ This example will always set the `_rigidBody` field to be equal to the RigidBody
 * failWhenNull [bool] - Should the game fail if this component can't be find
 * index [int] - Which component to bind to, if a gameObject has multiple of the same type
 
+### BindResource
+
 You can also bind any kind of resource using a similar syntax
 ```csharp
 public class SimpleScript : BindableMonoBehavior {
@@ -63,7 +66,28 @@ public class SimpleScript : BindableMonoBehavior {
 }
 ```
 
-The `[BindResource]` attribute always requires a path.
+The `[BindResource]` attribute always requires a path and **only works for assets in the `Resource` folder**
+
+* path [string] - The path of the Resource to load.
+
+### BindOnClick
+
+Finally, the new `[BindOnClick]` attribute allows you to bind a Button's `onClick` event to any annotated method.
+
+For example, if you had a Button in a Canvas named "ResetButton", then you can bind that button's `onClick` like so
+
+```csharp
+public class SimpleScript : BindableMonoBehavior {
+	
+	[BindOnClick("Canvas/ResetButton")]
+	void OnButtonClick()
+	{
+		SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+	}
+}
+```
+
+and that's it! No futher configuration in the Editor is required, when the button is clicked, this function will be called.
 
 ## To Do
 
