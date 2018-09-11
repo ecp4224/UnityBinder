@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 /// <summary>
@@ -30,6 +31,20 @@ public static class UnityBinder
 				foreach (var inject in injections)
 				{
 					inject.InjectInto(obj, field);
+				}
+			}
+		}
+
+		var methods = obj.GetType().GetMethods(bindingFlags);
+		foreach (var method in methods)
+		{
+			var injections = (BindOnClick[]) method.GetCustomAttributes(typeof(BindOnClick), true);
+
+			if (injections.Length > 0)
+			{
+				foreach (var inject in injections)
+				{
+					inject.InjectInto(obj, method);
 				}
 			}
 		}
@@ -88,10 +103,69 @@ public static class UnityBinder
 /// <summary>
 /// Abstract resource to represent any kind of Bind
 /// </summary>
-[AttributeUsage(AttributeTargets.Field)]
 public abstract class Binder : Attribute
 {
 	public abstract void InjectInto(Object obj, FieldInfo field);
+}
+
+/// <summary>
+/// Bind a method to an OnClick event that is triggered by a Button.
+/// 
+/// By default, the Button is searched on the gameObject attached to the script being bound
+/// You may specify a GameObject to search in by supplying the Editor path in the constructor
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+public class BindOnClick : Attribute
+{
+	private string buttonPath;
+
+	public BindOnClick(string buttonPath = "")
+	{
+		this.buttonPath = buttonPath;
+	}
+	
+	public void InjectInto(Object obj, MethodInfo method)
+	{
+		GameObject fromObj;
+		if (string.IsNullOrEmpty(buttonPath))
+		{
+			var component = obj as Component;
+			if (component != null)
+			{
+				fromObj = component.gameObject;
+			}
+			else
+			{
+				Debug.LogError("fromObject empty for field " + method.Name + ", and no default gameObject could be found!");
+				return;
+			}
+		}
+		else
+		{
+			fromObj = GameObject.Find(buttonPath);
+
+			if (fromObj == null)
+			{
+				fromObj = UnityBinder.FindInActiveObjectByName(buttonPath);
+
+				if (fromObj == null)
+				{
+					Debug.LogError("Could not find GameObject with name " + buttonPath + " for field " + method.Name);
+
+					return;
+				}
+			}
+		}
+
+		var button = fromObj.GetComponent<Button>();
+		if (button == null)
+		{
+			Debug.LogError("No Button Component found on GameObject @ " + buttonPath);
+			return;
+		}
+		
+		button.onClick.AddListener(delegate { method.Invoke(obj, new object[0]); });
+	}
 }
 
 /// <summary>
@@ -246,6 +320,12 @@ public class BindComponent : Binder
 				}
 			}
 		}
+
+		if (injectType == typeof(GameObject) && !string.IsNullOrEmpty(fromObject))
+		{
+			field.SetValue(obj, fromObj);
+			return;
+		}
 					
 
 		var genericMethod = unityCall.MakeGenericMethod(injectType);
@@ -285,6 +365,11 @@ public class BindComponent : Binder
 /// </summary>
 public class BindableMonoBehavior : MonoBehaviour {
 
+	/// <summary>
+	/// The standard Unity Awake() function. This function will invoke UnityBinder.Inject.
+	/// 
+	/// If you override this Awake() function, be sure to call base.Awake()
+	/// </summary>
 	public virtual void Awake()
 	{
 		UnityBinder.Inject(this);
