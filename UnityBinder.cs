@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
@@ -355,6 +357,124 @@ public class BindComponent : Binder
 			else
 			{
 				Debug.LogError("Could not find component of type " + injectType + " for field " + field.Name);
+			}
+		}
+	}
+}
+
+[AttributeUsage(AttributeTargets.Field)] 
+public class BindComponentsInChildren : Binder
+{
+
+	public int index = 0;
+	public string fromObject = "";
+
+	public BindComponentsInChildren(string fromObject = "")
+	{
+		this.index = index;
+		this.fromObject = fromObject;
+	}
+	
+	private static List<T> ConvertArray<T>(Array input)
+	{
+		return input.Cast<T>().ToList(); // Using LINQ for simplicity
+	}
+
+	public override void InjectInto(Object obj, FieldInfo field)
+	{
+		var injectArrayType = field.FieldType;
+
+		bool isList = false;
+		Type injectType;
+		if (injectArrayType.IsArray)
+		{
+			injectType = injectArrayType.GetElementType();
+		}
+		else if (injectArrayType.IsGenericType && injectArrayType.GetGenericTypeDefinition() == typeof(List<>))
+		{
+			injectType = injectArrayType.GetGenericArguments()[0];
+			isList = true;
+		}
+		else
+		{
+			Debug.LogError("Could not find suitable type " + injectArrayType + " for field " + field.Name + ". Field must either be an Array or a List");
+			return;
+		}
+
+		var unityCall = typeof(GameObject).GetMethod("GetComponentsInChildren", new Type[0]);
+		if (unityCall == null)
+		{
+			Debug.LogError("Could not find method GetComponents !!");
+			return;
+		}
+
+		GameObject fromObj;
+		if (string.IsNullOrEmpty(fromObject))
+		{
+			var component = obj as Component;
+			if (component != null)
+			{
+				fromObj = component.gameObject;
+			}
+			else
+			{
+				Debug.LogError("fromObject empty for field " + field.Name + ", and no default gameObject could be found!");
+				return;
+			}
+		}
+		else
+		{
+			fromObj = GameObject.Find(fromObject);
+
+			if (fromObj == null)
+			{
+				fromObj = UnityBinder.FindInActiveObjectByName(fromObject);
+
+				if (fromObj == null)
+				{
+					Debug.LogError("Could not find GameObject with name " + fromObject + " for field " + field.Name);
+
+					return;
+				}
+			}
+		}
+
+		if (injectType == typeof(GameObject) && !string.IsNullOrEmpty(fromObject))
+		{
+			field.SetValue(obj, fromObj);
+			return;
+		}
+					
+
+		var genericMethod = unityCall.MakeGenericMethod(injectType);
+		var rawResult = genericMethod.Invoke(fromObj, null);
+
+		if (rawResult == null)
+		{
+			Debug.LogError("Could not find component of type " + injectType + " for field " + field.Name);
+		} 
+		else if (rawResult is object[])
+		{
+			var result = rawResult as object[];
+
+			if (!isList)
+			{
+				field.SetValue(obj, result);
+			}
+			else
+			{
+				MethodInfo convertMethod = typeof(BindComponentsInChildren).GetMethod("ConvertArray",
+					BindingFlags.NonPublic | BindingFlags.Static);
+				if (convertMethod != null)
+				{
+					MethodInfo generic = convertMethod.MakeGenericMethod(new[] {injectType});
+
+					field.SetValue(obj, generic.Invoke(null, new object[] {rawResult}));
+				}
+				else
+				{
+					Debug.LogError("Fatel Error! Cannot make generic method call to BindComponentsInChildren.ConvertArray");
+				}
 			}
 		}
 	}
